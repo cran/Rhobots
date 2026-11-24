@@ -1,3 +1,76 @@
+# Rhobots 0.1.12
+
+## New features
+
+* New `detect_emotions()` for emotion analysis with checked preset models:
+  `"ekman"` (six basic emotions + neutral), `"goemotions"` (28 emotions,
+  several per text) and `"vad"` (valence, arousal, dominance on EmoBank's
+  1-5 scale).  It returns a tidy data frame, records which model was used,
+  and keeps loaded models in memory for the session.  Any HuggingFace
+  emotion model also works.  `emotion_models()` lists the presets.
+
+# Rhobots 0.1.11
+
+## New features
+
+* New `set_topic_labels()` gives topics custom names, from a named vector
+  or a filled-in spreadsheet (data frame with `Topic` and `Label`).  The
+  names appear in all accessors and plots.
+* `visualize_topics_over_time()` gains a `fit` argument and then shows
+  topic names in the legend instead of "Topic 0", "Topic 1", ... (its
+  documented example already used `fit = fit`, which failed before).
+* DistilBERT models now work in `load_hf_bert()` and
+  `load_hf_classifier()` (sequence and token classification).  DistilBERT
+  was listed as supported before but failed to load.  This opens up many
+  emotion, sentiment and NER models, e.g.
+  `bhadresh-savani/distilbert-base-uncased-emotion`.
+
+## Bug fixes
+
+* `build_dtm()`, and so the c-TF-IDF step of `fit_bertopic()` and
+  `zero_shot_topics()`, took time quadratic in the number of documents:
+  the sparse-matrix triplets were grown document by document.  It is now
+  built in one pass, with identical output: 30,000 documents take about 1 s
+  instead of 2 minutes, and 150,000 no longer take hours.
+
+* `classify_texts()` on NER / token-classification models returned no
+  tokens: the token strings were read from a field the tokenizer does not
+  provide.  Output now matches Python `transformers`.
+
+* `embed_texts(chunk_strategy = "mean" / "first")` treated padding as real
+  text: short documents were padded to the longest document in the batch,
+  the padding was attended to, and a pad token was used as `[SEP]`.
+  Chunked embeddings change as a result and now match embedding each
+  document on its own.  Re-run any chunked embeddings made with earlier
+  versions.
+* `hdbscan_clustering()` with the default `allow_single_cluster = FALSE`
+  returned all documents as one cluster when the cluster tree never split
+  into groups of at least `min_pts`.  It now returns all documents as
+  noise, as Python `hdbscan` and `dbscan::hdbscan()` do.
+
+## Memory
+
+* `embed_texts()` uses far less memory on large corpora.  On 3,000
+  documents (MiniLM, batch 64 x 256 tokens) peak memory fell from 17.6 GB
+  to 4.4 GB, and to 1.9-2.4 GB with `max_tokens`, without slowing down.
+  Peak memory now depends on the largest batch, not on corpus size.
+  Default output is unchanged.
+  * Finished batches and each encoder layer's attention tensors are freed
+    straight away; torch tensors are invisible to R's garbage collector,
+    so they used to pile up.  New argument `gc_every` (default 1; `0`
+    turns all cleanup off).
+  * New argument `max_tokens` caps padded tokens per batch, so long texts
+    get smaller batches and short texts can use a large `batch_size`.
+  * Batches run longest first, so the first batch reserves the largest
+    memory blocks and later batches reuse them.  An out-of-memory error
+    therefore appears at the start of a run, not the end.
+  * Texts are tokenized and chunked in blocks of documents, and the result
+    matrix is no longer copied during reordering or normalisation.
+* `classify_texts()` uses the same memory strategy as `embed_texts()`
+  (block tokenization, longest-first batching, memory freed after every
+  batch and layer) and gains the `max_tokens` and `gc_every` arguments.
+  Its `text` column now shows the input texts without the model prefix.
+
 # Rhobots 0.1.10
 
 ## CRAN policy fixes
